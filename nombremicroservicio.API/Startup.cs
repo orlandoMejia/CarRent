@@ -16,6 +16,14 @@ using OpenTelemetry.Trace;
 using OpenTelemetry.Logs;
 using Microsoft.OpenApi;
 using Microsoft.OpenApi.Models;
+using nombremicroservicio.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using MediatR;
+using System.Linq;
+using nombremicroservicio.Infrastructure.Services;
+using nombremicroservicio.Repository.Client.Command;
+using nombremicroservicio.Domain.Interfaces;
+using nombremicroservicio.Repository;
 
 namespace nombremicroservicio.API
 {
@@ -30,8 +38,11 @@ namespace nombremicroservicio.API
 
         public void ConfigureServices(IServiceCollection services)
         {
+           
+
             #region OPENTELEMETRY
             string otelServer = Environment.GetEnvironmentVariable("OTEL_SERVER");
+            Console.WriteLine(otelServer);
             var serviceName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name;
 
             services.AddHttpContextAccessor();
@@ -62,6 +73,14 @@ namespace nombremicroservicio.API
 
             #region INFRASTRUCTURE
 
+            services.AddDbContext<PersistenceContext>(opt =>
+            {
+                opt.UseNpgsql(Configuration.GetConnectionString("database"), options =>
+                {
+                    options.MigrationsHistoryTable("_MigrationHistory", Configuration.GetValue<string>("SchemaName"));
+                });
+            });
+
 
             #endregion INFRASTRUCTURE
 
@@ -74,13 +93,29 @@ namespace nombremicroservicio.API
             services.AddApiVersioning(options => options.AssumeDefaultVersionWhenUnspecified = true);
             #endregion HANDLING API VERSIONS
 
-            #region POLICY FOR CROSS DOMAIN
+            #region POLICY FOR CORS DOMAIN
             services.AddCors(options => options.AddPolicy("AllowAll", p => p.AllowAnyOrigin()
                                                                    .AllowAnyMethod()
                                                                    .AllowAnyHeader()));
-            #endregion POLICY FOR CROSS DOMAIN
+            #endregion POLICY FOR CORS DOMAIN
 
+            services.AddMediatR(Assembly.Load("nombremicroservicio.Repository"));
+
+            services.AddTransient<BrandService>();
+            services.AddTransient<ClientService>();
+            services.AddTransient<CreditRequestService>();
+            services.AddTransient<DriveWayService>();
+            services.AddTransient<ExecutiveService>();
+            services.AddTransient<AssigmentService>();
+
+            services.AddTransient(typeof(IGenericRepository<>), typeof(GenericRepository<>));
             services.AddControllers();
+
+            var applicationAssemblyName = typeof(Startup).Assembly.GetReferencedAssemblies()
+                .FirstOrDefault(x => x.Name.Equals("nombremicroservicio.Repository", StringComparison.InvariantCulture));
+
+            services.AddAutoMapper(Assembly.Load(applicationAssemblyName.FullName));
+
             #region Swagger
             services.AddSwaggerGen(c =>
             {
